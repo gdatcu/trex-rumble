@@ -4,6 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Jurassic Run: Final</title>
+    
+    <meta name="theme-color" content="#2b2b2b">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.json">
+    
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦖</text></svg>">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
     <style>
         /* --- RESET & LAYOUT --- */
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -185,6 +194,15 @@
 </div>
 
 <script>
+    // --- 0. PWA REGISTRATION ---
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js')
+                .then(reg => console.log('Service Worker Registered'))
+                .catch(err => console.log('Service Worker Failed', err));
+        });
+    }
+
     // --- 1. ASSET CONFIGURATION ---
     const assets = {
         dino: 'trex.png',
@@ -323,21 +341,22 @@
         loop();
     }
 
-    // Inputs (Jump anywhere)
+    // --- INPUT HANDLING ---
     function handleTouch(e) {
-        // Prevent default zoom/scroll
+        const t = e.target;
+        // Allow Menu Interactions
+        if(t.tagName === 'BUTTON' || t.closest('.btn-mode') || t.closest('.btn-action')) {
+            return; 
+        }
+        // Prevent default scrolling for gameplay
         if(e.cancelable) e.preventDefault(); 
 
-        // If game not running, ignore
         if(!running) return;
 
-        // Check if the touch target is the Roar button
-        if(e.target.closest('#roar-btn')) {
+        if(t.closest('#roar-btn')) {
             roar();
             return;
         }
-
-        // Otherwise, JUMP
         jump();
     }
 
@@ -370,7 +389,7 @@
         }
     }
 
-    // Bind inputs to the entire window for better mobile response
+    // Bind inputs
     window.addEventListener('mousedown', handleTouch);
     window.addEventListener('touchstart', handleTouch, {passive: false});
     window.addEventListener('keydown', e => { if(e.code === 'Space') jump(); });
