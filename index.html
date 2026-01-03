@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Jurassic Run: Final</title>
+    <style>
+        /* --- RESET & LAYOUT --- */
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body {
+            margin: 0; padding: 0; background: #000;
+            overflow: hidden; height: 100vh; width: 100vw;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            touch-action: none; user-select: none;
+            display: flex; justify-content: center; align-items: center;
+        }
+
+        /* --- GAME CANVAS --- */
+        #game-container {
+            position: relative; width: 100%; height: 100%;
+            background: #87CEEB; /* Fallback Sky */
+            overflow: hidden;
+        }
+        canvas { display: block; width: 100%; height: 100%; }
+
+        /* --- UI LAYER --- */
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; /* Let touches pass through to game */
+            display: flex; flex-direction: column; justify-content: space-between;
+            padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+            z-index: 20;
+        }
+
+        /* Top HUD */
+        .hud-top { display: flex; justify-content: space-between; align-items: flex-start; }
+        
+        .score-box {
+            background: rgba(0,0,0,0.6); 
+            padding: 8px 20px; border-radius: 30px;
+            border: 2px solid rgba(255,255,255,0.3);
+            display: flex; flex-direction: column; align-items: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .score-label { font-size: 10px; color: #ddd; text-transform: uppercase; font-weight: 700; letter-spacing: 1px; }
+        #score-val { font-size: 28px; color: #FFD700; font-weight: 900; font-family: monospace; line-height: 1; }
+
+        /* Lives / Shield */
+        .shield-badge {
+            background: #2E7D32; color: #fff; padding: 8px 16px;
+            border-radius: 20px; font-weight: 800; font-size: 12px;
+            box-shadow: 0 0 15px #4CAF50; border: 2px solid #81C784;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .lives-box { font-size: 30px; letter-spacing: 5px; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.5)); }
+
+        /* Bottom Controls */
+        .hud-bottom { display: flex; justify-content: flex-end; align-items: flex-end; pointer-events: none; }
+        
+        #roar-btn {
+            width: 90px; height: 90px; border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #ff5252, #b71c1c);
+            border: 4px solid white; 
+            font-size: 40px; display: flex; justify-content: center; align-items: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            pointer-events: auto; cursor: pointer; transition: transform 0.1s;
+        }
+        #roar-btn:active { transform: scale(0.9); }
+        #roar-btn.cooldown { filter: grayscale(1); opacity: 0.6; transform: scale(0.95); }
+
+        /* Hints */
+        .hint { 
+            position: absolute; bottom: 30px; left: 30px; 
+            color: rgba(255,255,255,0.5); font-weight: 900; font-size: 20px; 
+            text-transform: uppercase; text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            pointer-events: none; z-index: 15;
+        }
+
+        /* --- MENUS --- */
+        #menu-overlay {
+            position: absolute; top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.85); z-index: 100;
+            display: flex; justify-content: center; align-items: center;
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        }
+
+        .menu-card {
+            background: linear-gradient(145deg, #2b2b2b, #1a1a1a);
+            padding: 30px; border-radius: 25px;
+            border: 1px solid rgba(255,255,255,0.1); 
+            text-align: center; color: white; width: 90%; max-width: 380px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+            pointer-events: auto;
+        }
+
+        h1 { margin: 0 0 10px 0; color: #4CAF50; font-style: italic; font-size: 40px; text-shadow: 0 3px 0 #1b5e20; }
+        .sub { color: #888; margin-bottom: 20px; font-weight: bold; }
+
+        .mode-select { display: flex; gap: 10px; margin-bottom: 20px; }
+        .btn-mode {
+            flex: 1; padding: 15px; border-radius: 12px; border: 2px solid #444;
+            background: #333; color: #aaa; font-weight: bold; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-mode.selected { 
+            background: #FFD700; color: #000; border-color: #fff; 
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+        }
+
+        .btn-action {
+            width: 100%; padding: 20px; border: none; border-radius: 15px;
+            font-size: 22px; font-weight: 900; text-transform: uppercase;
+            color: white; cursor: pointer; margin-top: 10px;
+            background: linear-gradient(135deg, #4CAF50, #2E7D32);
+            box-shadow: 0 6px 0 #1B5E20, 0 10px 20px rgba(0,0,0,0.4);
+            transition: transform 0.1s;
+        }
+        .btn-action:active { transform: translateY(4px); box-shadow: 0 2px 0 #1B5E20; }
+
+        #gameover-card { border: 2px solid #ef5350; }
+        #gameover-card h1 { color: #ef5350; text-shadow: 0 3px 0 #b71c1c; }
+
+        /* Win Screen Style */
+        #win-card { border: 2px solid #FFD700; }
+        #win-card h1 { color: #FFD700; text-shadow: 0 0 20px rgba(255, 215, 0, 0.8); }
+        .win-btn { background: linear-gradient(135deg, #FFD700, #FFA000); color: black; box-shadow: 0 6px 0 #b36b00; }
+
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div class="hint">Tap Anywhere to Jump</div>
+
+    <div id="ui-layer">
+        <div class="hud-top">
+            <div class="score-box">
+                <span class="score-label">Meat Goal</span>
+                <span id="score-val">0/10</span>
+            </div>
+            <div id="lives-display"></div>
+        </div>
+        <div class="hud-bottom">
+            <div id="roar-btn">🦖</div>
+        </div>
+    </div>
+
+    <div id="menu-overlay">
+        
+        <div class="menu-card" id="start-screen">
+            <h1>DINO RUMBLE</h1>
+            <div class="sub">Eat Meat • Avoid Rocks</div>
+            
+            <div class="mode-select">
+                <button class="btn-mode selected" onclick="setMode('toddler', this)">
+                    Toddler<br><span style="font-size:10px">Win: 10 Meat</span>
+                </button>
+                <button class="btn-mode" onclick="setMode('normal', this)">
+                    Normal<br><span style="font-size:10px">Win: 20 Meat</span>
+                </button>
+            </div>
+            
+            <button class="btn-action" onclick="startGame()">START RUN</button>
+        </div>
+
+        <div class="menu-card" id="gameover-screen" style="display:none;">
+            <h1>CRASHED!</h1>
+            <div class="sub" style="font-size: 18px; color: #fff;">
+                Try Again!
+            </div>
+            <button class="btn-action" style="background: linear-gradient(135deg, #ef5350, #c62828);" onclick="startGame()">RETRY</button>
+            <div style="margin-top:20px; color:#888; text-decoration:underline; cursor:pointer;" onclick="showMenu()">Main Menu</div>
+        </div>
+
+        <div class="menu-card" id="win-screen" style="display:none;">
+            <h1>YOU WIN!</h1>
+            <div class="sub" style="color: #FFD700;">T-Rex is Full!</div>
+            <button class="btn-action win-btn" onclick="startGame()">PLAY AGAIN</button>
+            <div style="margin-top:20px; color:#888; text-decoration:underline; cursor:pointer;" onclick="showMenu()">Main Menu</div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    // --- 1. ASSET CONFIGURATION ---
+    const assets = {
+        dino: 'trex.png',
+        meat: 'meat.png',
+        enemy: 'enemy.png', // Pterodactyl
+        // Audio
+        bgm: 'jungle_rhythm.mp3',
+        jump: 'jump.mp3',
+        roar: 'roar.mp3',
+        collect: 'chomp.mp3',
+        crash: 'crash.mp3'
+    };
+
+    // Load Images
+    const imgs = {};
+    for (const [key, src] of Object.entries(assets)) {
+        if (!src.endsWith('mp3')) {
+            imgs[key] = new Image();
+            imgs[key].src = src;
+        }
+    }
+
+    // Load Audio
+    const sounds = {};
+    let audioReady = false;
+
+    function initAudio() {
+        if (audioReady) return;
+        ['bgm', 'jump', 'roar', 'collect', 'crash'].forEach(k => {
+            sounds[k] = new Audio(assets[k]);
+        });
+        sounds.bgm.loop = true;
+        sounds.bgm.volume = 0.4;
+        audioReady = true;
+    }
+
+    function playSnd(k) {
+        if (audioReady && sounds[k]) {
+            sounds[k].currentTime = 0;
+            sounds[k].play().catch(()=>{});
+        }
+    }
+
+    // --- 2. GAME ENGINE ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    let W, H;
+    let running = false;
+    let confettiRunning = false;
+    let mode = 'toddler';
+    let score = 0;
+    let targetScore = 10;
+    let lives = 3;
+    let frame = 0;
+    let speed = 6;
+    let entities = [];
+    let particles = [];
+    let confettiParticles = [];
+    let clouds = [];
+    let mountains = [];
+
+    // Bigger Dino Config
+    const dino = {
+        x: 50, y: 0, 
+        w: 150, h: 110, // BIGGER
+        dy: 0, ground: 0,
+        grounded: false, state: 'run', roarTimer: 0
+    };
+
+    function resize() {
+        W = canvas.width = window.innerWidth;
+        H = canvas.height = window.innerHeight;
+        dino.ground = H - 100; // Ground level
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // --- 3. PROCEDURAL GENERATION ---
+    function initWorld() {
+        clouds = [];
+        mountains = [];
+        for(let i=0; i<5; i++) clouds.push(createCloud(Math.random()*W));
+        for(let i=0; i<3; i++) mountains.push(createMountain(i*(W/3)));
+    }
+
+    function createCloud(x) {
+        return { x: x, y: Math.random() * (H/2), size: 30 + Math.random()*40, speed: 0.5 + Math.random()*0.5 };
+    }
+
+    function createMountain(x) {
+        return { x: x, h: 100 + Math.random()*150, w: 300 + Math.random()*200, c: 100 + Math.random()*50 }; 
+    }
+
+    // --- 4. GAME LOGIC ---
+    function setMode(m, btn) {
+        mode = m;
+        targetScore = (mode === 'toddler') ? 10 : 20;
+        document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+    }
+
+    function showMenu() {
+        document.getElementById('start-screen').style.display = 'block';
+        document.getElementById('gameover-screen').style.display = 'none';
+        document.getElementById('win-screen').style.display = 'none';
+        confettiRunning = false;
+    }
+
+    function startGame() {
+        initAudio();
+        playSnd('bgm');
+        
+        document.getElementById('menu-overlay').style.display = 'none';
+        document.getElementById('start-screen').style.display = 'none';
+        document.getElementById('gameover-screen').style.display = 'none';
+        document.getElementById('win-screen').style.display = 'none';
+
+        running = true;
+        confettiRunning = false;
+        score = 0;
+        frame = 0;
+        lives = 3;
+        speed = (mode === 'toddler') ? 7 : 10;
+        
+        entities = [];
+        particles = [];
+        initWorld();
+
+        dino.y = dino.ground - dino.h;
+        dino.dy = 0;
+        dino.roarTimer = 0;
+        dino.state = 'run';
+
+        updateUI();
+        loop();
+    }
+
+    // Inputs (Jump anywhere)
+    function handleTouch(e) {
+        // Prevent default zoom/scroll
+        if(e.cancelable) e.preventDefault(); 
+
+        // If game not running, ignore
+        if(!running) return;
+
+        // Check if the touch target is the Roar button
+        if(e.target.closest('#roar-btn')) {
+            roar();
+            return;
+        }
+
+        // Otherwise, JUMP
+        jump();
+    }
+
+    function jump() {
+        if(running && dino.grounded) {
+            dino.dy = -18; 
+            dino.grounded = false;
+            dino.state = 'jump';
+            playSnd('jump');
+        }
+    }
+
+    function roar() {
+        if(running && dino.roarTimer <= 0) {
+            dino.roarTimer = 100;
+            dino.state = 'roar';
+            playSnd('roar');
+            // Visual Shake
+            const shake = 10;
+            canvas.style.transform = `translate(${Math.random()*shake-shake/2}px, ${Math.random()*shake-shake/2}px)`;
+            setTimeout(() => canvas.style.transform = 'none', 200);
+            
+            // Destroy visible obstacles
+            entities.forEach((e, i) => {
+                if(e.type === 'rock' || e.type === 'enemy') {
+                    spawnParticles(e.x + e.w/2, e.y + e.h/2, '#888', 10);
+                    entities.splice(i, 1);
+                }
+            });
+        }
+    }
+
+    // Bind inputs to the entire window for better mobile response
+    window.addEventListener('mousedown', handleTouch);
+    window.addEventListener('touchstart', handleTouch, {passive: false});
+    window.addEventListener('keydown', e => { if(e.code === 'Space') jump(); });
+
+    // Loop
+    function loop() {
+        if(!running) return;
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+
+    function update() {
+        frame++;
+        
+        // Physics
+        dino.dy += 0.8; // Gravity
+        dino.y += dino.dy;
+
+        if(dino.y + dino.h > dino.ground) {
+            dino.y = dino.ground - dino.h;
+            dino.dy = 0;
+            dino.grounded = true;
+            if(dino.state === 'jump') dino.state = 'run';
+        }
+
+        // Roar Cooldown
+        if(dino.roarTimer > 0) {
+            dino.roarTimer--;
+            document.getElementById('roar-btn').classList.add('cooldown');
+            if(dino.roarTimer <= 0) {
+                dino.state = 'run';
+                document.getElementById('roar-btn').classList.remove('cooldown');
+            }
+        }
+
+        // Background Animation
+        clouds.forEach(c => {
+            c.x -= c.speed;
+            if(c.x < -100) { c.x = W + 50; c.y = Math.random()*(H/2); }
+        });
+        mountains.forEach(m => {
+            m.x -= speed * 0.2; // Parallax
+            if(m.x + m.w < 0) {
+                m.x = W + 50;
+                m.h = 100 + Math.random()*150;
+                m.w = 300 + Math.random()*200;
+            }
+        });
+
+        // Spawner
+        let rate = (mode === 'toddler') ? 90 : 60;
+        if(frame % rate === 0) {
+            let r = Math.random();
+            if(r < 0.4) {
+                // Meat
+                entities.push({ type:'meat', x:W, y: dino.ground - 60 - Math.random()*100, w:60, h:40 });
+            } else if (r < 0.7) {
+                // Rock (Generated)
+                entities.push({ type:'rock', x:W, y: dino.ground - 60, w:60, h:60 });
+            } else {
+                // Enemy (Pterodactyl - Bigger)
+                entities.push({ type:'enemy', x:W, y: dino.ground - 140, w:100, h:60 });
+            }
+        }
+
+        // Entities Logic
+        for(let i=entities.length-1; i>=0; i--) {
+            let e = entities[i];
+            e.x -= speed;
+
+            // Collision (Hitbox padding)
+            let p = 20; 
+            if(dino.x+p < e.x+e.w-p && dino.x+dino.w-p > e.x+p &&
+               dino.y+p < e.y+e.h-p && dino.y+dino.h-p > e.y+p) {
+                
+                if(e.type === 'meat') {
+                    score++; 
+                    playSnd('collect');
+                    spawnParticles(e.x+25, e.y+25, '#ef5350', 5);
+                    entities.splice(i, 1);
+                    updateUI();
+                    
+                    if(score >= targetScore) gameWin();
+
+                } else {
+                    // Hit Obstacle
+                    if(dino.state === 'roar') {
+                        // Smash it
+                        spawnParticles(e.x+30, e.y+30, '#777', 8);
+                        entities.splice(i, 1);
+                    } else if (mode === 'toddler') {
+                        // Bounce off
+                        dino.dy = -10;
+                        playSnd('crash');
+                        spawnParticles(e.x+30, e.y+30, '#fff', 5);
+                        entities.splice(i, 1);
+                    } else {
+                        // Take Damage
+                        lives--;
+                        playSnd('crash');
+                        entities.splice(i, 1);
+                        updateUI();
+                        if(lives <= 0) gameOver();
+                        else {
+                            canvas.style.opacity = 0.5;
+                            setTimeout(()=>canvas.style.opacity=1, 100);
+                        }
+                    }
+                }
+            }
+            if(e.x < -100) entities.splice(i, 1);
+        }
+
+        // Particles
+        for(let i=particles.length-1; i>=0; i--) {
+            let p = particles[i];
+            p.x += p.vx; p.y += p.vy; p.life--;
+            if(p.life <= 0) particles.splice(i, 1);
+        }
+    }
+
+    // --- 5. DRAWING ---
+    function draw() {
+        // Sky
+        let grd = ctx.createLinearGradient(0,0,0,H);
+        grd.addColorStop(0, "#2196F3"); // Blue
+        grd.addColorStop(1, "#B3E5FC"); // Light Blue
+        ctx.fillStyle = grd;
+        ctx.fillRect(0,0,W,H);
+
+        // Sun
+        ctx.fillStyle = "rgba(255, 235, 59, 0.8)";
+        ctx.beginPath(); ctx.arc(W-100, 100, 40, 0, Math.PI*2); ctx.fill();
+
+        // Mountains (Generated)
+        mountains.forEach(m => {
+            ctx.fillStyle = `rgb(${m.c},${m.c},${m.c})`;
+            ctx.beginPath();
+            ctx.moveTo(m.x, H-100);
+            ctx.lineTo(m.x + m.w/2, H-100 - m.h);
+            ctx.lineTo(m.x + m.w, H-100);
+            ctx.fill();
+        });
+
+        // Clouds (Generated)
+        ctx.fillStyle = "rgba(255,255,255,0.8)";
+        clouds.forEach(c => {
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, c.size, 0, Math.PI*2);
+            ctx.arc(c.x+c.size, c.y-10, c.size*0.8, 0, Math.PI*2);
+            ctx.arc(c.x-c.size, c.y+5, c.size*0.6, 0, Math.PI*2);
+            ctx.fill();
+        });
+
+        // Ground (Generated)
+        ctx.fillStyle = "#43A047";
+        ctx.fillRect(0, dino.ground, W, H-dino.ground);
+        ctx.fillStyle = "#2E7D32"; // Grass edge
+        ctx.fillRect(0, dino.ground, W, 15);
+
+        // --- DRAW DINO (Image) ---
+        ctx.save();
+        ctx.translate(dino.x, dino.y);
+        
+        // Roar Aura
+        if(dino.state === 'roar') {
+            ctx.strokeStyle = "rgba(255,215,0,0.6)"; ctx.lineWidth = 5;
+            ctx.beginPath(); ctx.arc(dino.w/2, dino.h/2, 80, 0, Math.PI*2); ctx.stroke();
+        }
+
+        if(imgs.dino.complete) {
+            ctx.drawImage(imgs.dino, 0, 0, dino.w, dino.h);
+        } else {
+            ctx.fillStyle = '#4CAF50'; ctx.fillRect(0,0, dino.w, dino.h);
+        }
+        ctx.restore();
+
+        // --- DRAW ENTITIES ---
+        entities.forEach(e => {
+            if(e.type === 'rock') {
+                // Rock (Generated)
+                ctx.save(); ctx.translate(e.x, e.y);
+                ctx.fillStyle = "#78909C";
+                ctx.beginPath(); ctx.arc(20, 40, 20, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(45, 45, 15, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(30, 20, 18, 0, Math.PI*2); ctx.fill();
+                ctx.restore();
+            } else {
+                // Meat and Enemy (Images)
+                let img = (e.type === 'meat') ? imgs.meat : imgs.enemy;
+                if(img && img.complete) {
+                    ctx.drawImage(img, e.x, e.y, e.w, e.h);
+                } else {
+                    ctx.fillStyle = (e.type==='meat')?'red':'purple';
+                    ctx.fillRect(e.x, e.y, e.w, e.h);
+                }
+            }
+        });
+
+        // Particles
+        particles.forEach(p => {
+            ctx.fillStyle = p.c;
+            ctx.fillRect(p.x, p.y, p.s, p.s);
+        });
+    }
+
+    // --- UI UPDATES ---
+    function updateUI() {
+        document.getElementById('score-val').innerText = `${score}/${targetScore}`;
+        const lifeDiv = document.getElementById('lives-display');
+        if(mode === 'toddler') {
+            lifeDiv.innerHTML = `<div class="shield-badge">SHIELD ACTIVE</div>`;
+        } else {
+            let hearts = '';
+            for(let i=0; i<lives; i++) hearts += '❤️';
+            lifeDiv.innerHTML = `<div class="lives-box">${hearts}</div>`;
+        }
+    }
+
+    function spawnParticles(x, y, c, n) {
+        for(let i=0; i<n; i++) {
+            particles.push({
+                x:x, y:y, vx:(Math.random()-0.5)*12, vy:(Math.random()-0.5)*12,
+                life:30, c:c, s:Math.random()*6+3
+            });
+        }
+    }
+
+    // --- ENDINGS ---
+    function gameOver() {
+        running = false;
+        document.getElementById('menu-overlay').style.display = 'flex';
+        document.getElementById('gameover-screen').style.display = 'block';
+    }
+
+    function gameWin() {
+        running = false; // Stop physics
+        playSnd('roar'); 
+        document.getElementById('menu-overlay').style.display = 'flex';
+        document.getElementById('win-screen').style.display = 'block';
+        startConfetti(); // Start separate visual loop
+    }
+
+    // --- CONFETTI SYSTEM ---
+    function startConfetti() {
+        confettiRunning = true;
+        confettiParticles = [];
+        let colors = ['#F44336', '#2196F3', '#FFEB3B', '#4CAF50', '#E91E63'];
+        
+        // Init particles
+        for(let i=0; i<150; i++) {
+            confettiParticles.push({
+                x: Math.random() * W,
+                y: Math.random() * H - H,
+                vx: (Math.random() - 0.5) * 6,
+                vy: Math.random() * 5 + 3,
+                c: colors[Math.floor(Math.random() * colors.length)],
+                s: Math.random() * 8 + 4
+            });
+        }
+        drawConfettiLoop();
+    }
+
+    function drawConfettiLoop() {
+        if(!confettiRunning) return;
+        
+        // 1. Redraw the frozen game state background
+        draw(); 
+
+        // 2. Draw overlay for contrast
+        ctx.fillStyle = "rgba(0,0,0,0.5)";
+        ctx.fillRect(0,0,W,H);
+
+        // 3. Update and Draw Confetti
+        confettiParticles.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+            
+            // Wobble
+            p.x += Math.sin(p.y * 0.05);
+
+            if(p.y > H) { p.y = -10; p.x = Math.random() * W; } // Reset
+
+            ctx.fillStyle = p.c;
+            ctx.fillRect(p.x, p.y, p.s, p.s);
+        });
+
+        requestAnimationFrame(drawConfettiLoop);
+    }
+
+</script>
+</body>
+</html>
